@@ -1,0 +1,50 @@
+# Refreshes the market data each month and publishes the map to GitHub Pages.
+name: Refresh map data
+
+on:
+  schedule:
+    - cron: "0 14 22 * *" # 22nd of each month, after Zillow and BLS publish the prior month
+  workflow_dispatch: # allows a manual run from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Download and merge data
+        run: python3 fetch_data.py
+      - name: Build page
+        run: |
+          node build.mjs
+          python3 build_embed.py
+          mkdir -p site
+          cp embed/rtp-map.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
