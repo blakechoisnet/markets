@@ -17,9 +17,9 @@ open(os.path.join(ROOT, "embed/rtp-map.html"), "w").write(doc)
 
 # The page goes into an iframe's srcdoc via a JS template literal, so escape what would end it early.
 t = doc.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${").replace("</script", "<\\/script").replace("<!--", "<\\!--")
-paste = ('<!-- Rent-to-Price Map: paste this whole block into a GHL "Custom JS/HTML" element. -->\n'
+paste = ('<!-- Best Real Estate Markets: paste this whole block into a GHL "Custom JS/HTML" element. -->\n'
          '<div id="rtp-map-embed"></div>\n<script>\n(function () {\n  var f = document.createElement("iframe");\n'
-         '  f.title = "Rent-to-Price Map";\n  f.style.cssText = "width:100%;height:850px;border:0;display:block;";\n'
+         '  f.title = "Best Real Estate Markets";\n  f.style.cssText = "width:100%;height:850px;border:0;display:block;";\n'
          "  f.srcdoc = `" + t + "`;\n  document.getElementById(\"rtp-map-embed\").appendChild(f);\n})();\n</script>\n")
 open(os.path.join(ROOT, "embed/ghl-paste.txt"), "w").write(paste)
 print("embed/rtp-map.html and embed/ghl-paste.txt written")

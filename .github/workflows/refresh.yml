@@ -5,6 +5,8 @@ on:
   schedule:
     - cron: "0 14 22 * *" # 22nd of each month, after Zillow and BLS publish the prior month
   workflow_dispatch: # allows a manual run from the Actions tab
+  push:
+    branches: [main] # republish when the map's code changes
 
 permissions:
   contents: read

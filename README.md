@@ -1,4 +1,4 @@
-# Rent-to-Price Map
+# Best Real Estate Markets
 
 Interactive map of US cities (30k+ people) colored by rent-to-price ratio or home value growth, with economic filters.
 
