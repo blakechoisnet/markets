@@ -179,7 +179,7 @@ main { position: relative; flex: 1; min-height: 0; }
 <details id="filters" class="wrap" open>
   <summary id="fsum">Filters</summary>
   <form class="fgrid" id="fform" autocomplete="off">
-    <div class="field"><label for="f-popMin">Min population</label><input type="number" id="f-popMin" step="1000" min="0" placeholder="30,000"></div>
+    <div class="field"><label for="f-popMin">Min population</label><input type="number" id="f-popMin" step="1000" min="0" placeholder="5,000"></div>
     <div class="field"><label for="f-popMax">Max population</label><input type="number" id="f-popMax" step="1000" min="0" placeholder="Any"></div>
     <div class="field"><label for="f-rtpMin">Min RTP %</label><input type="number" id="f-rtpMin" step="0.05" min="0" placeholder="Any"></div>
     <div class="field"><label for="f-pg">Min pop. growth %</label><input type="number" id="f-pg" step="0.1" placeholder="Any"></div>
@@ -365,7 +365,7 @@ function ordinal(n) { const v = n % 100, s = ["th", "st", "nd", "rd"]; return n 
 function stateTip(a) {
   const i = stateInfo[a], s = STATE[a];
   if (i.excludedBad) return `<span>${s.n}</span> · filtered out (anti-landlord state)`;
-  if (!i.total) return `<span>${s.n}</span> · no cities ≥ 30k`;
+  if (!i.total) return `<span>${s.n}</span> · no cities with 5,000+ people`;
   if (i.val == null) return `${s.n} · no qualifying cities`;
   return MODE === MODES.cash
     ? `${s.n} · highest RTP <b>${MODE.fmt(i.val)}</b> (${i.best.n}) · ${ordinal(Math.round(i.pct * 100))} percentile`
@@ -424,7 +424,7 @@ function drawCities() {
   const k = pxScale();
   let list = cur ? byState[cur] || [] : DATA.cities.filter(isHl);
   list = [...list.filter((c) => !isHl(c)), ...list.filter(isHl)]; // highlighted dots on top
-  const radius = (c) => cur ? Math.max(4.5, Math.min(16, Math.sqrt(c.pop) / 45)) : Math.max(3.5, Math.min(9, Math.sqrt(c.pop) / 90));
+  const radius = (c) => cur ? Math.max(3, Math.min(16, Math.sqrt(c.pop) / 45)) : Math.max(3.5, Math.min(9, Math.sqrt(c.pop) / 90));
   const pat = $("#stripes"); pat.setAttribute("width", 6 / k); pat.setAttribute("height", 6 / k);
   pat.children[0].setAttribute("width", 6 / k); pat.children[0].setAttribute("height", 6 / k);
   pat.children[1].setAttribute("width", 3 / k); pat.children[1].setAttribute("height", 6 / k);

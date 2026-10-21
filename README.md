@@ -1,6 +1,6 @@
 # Best Real Estate Markets
 
-Interactive map of US cities (30k+ people) colored by rent-to-price ratio or home value growth, with economic filters.
+Interactive map of US cities (5,000+ people) colored by rent-to-price ratio or home value growth, with economic filters.
 
 - `fetch_data.py` downloads and merges data from Zillow Research, the U.S. Census Bureau and the U.S. Bureau of Labor Statistics into `data/cities.json`.
 - `build.mjs` embeds the data and state shapes into `app.html` → `dist/index.html`.

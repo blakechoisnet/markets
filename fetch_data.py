@@ -14,7 +14,7 @@ Usage: python3 fetch_data.py
 """
 import csv, io, json, os, re, statistics, sys, urllib.request, zipfile
 
-MIN_POP = 30000
+MIN_POP = 5000
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 CACHE = os.path.join(OUT, "raw")
 os.makedirs(CACHE, exist_ok=True)
