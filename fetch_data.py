@@ -1,7 +1,9 @@
 """Download and merge city market data into data/cities.json.
 
 Sources (all free, no login):
-  Rent    ACS 5-yr B25031 (E005)  median gross rent, 3-bedroom units (place level)
+  Rent    ACS 1-yr B25031 (E005) for places with 65k+ people, else ACS 5-yr; scaled to today with
+          Zillow's single-family rent index for the metro (fallback: city/ZIP all-rentals index, state median);
+          a city with no rent this month keeps its previous rent  median gross rent, 3-bedroom units (place level)
   Price   Zillow ZHVI, 3-bedroom homes, city level (latest month)
   Value growth   Zillow ZHVI all homes, latest month vs 12 months earlier
   Population + growth   Census PEP city estimates (incorporated places); ACS for CDPs
@@ -23,6 +25,16 @@ BAD_LANDLORD = ["CA", "NY", "NJ", "OR", "WA", "MA", "IL", "MD", "VT", "DC"]
 
 UA = f"rtp-map data build ({os.environ.get('BLS_EMAIL', 'research@example.com')})"
 gaps = []  # human-readable notes on data we could not get
+
+# Last published data, so a city that loses a value this month can keep its previous one.
+PREV, PREV_MONTH = {}, None
+try:
+    with open(os.path.join(OUT, "cities.json")) as f:
+        _prev = json.load(f)
+    PREV = {c["id"]: c for c in _prev["cities"]}
+    PREV_MONTH = _prev["meta"].get("zoriMonth")
+except (OSError, ValueError, KeyError):
+    pass
 
 
 def get(url, name=None, binary=False):
@@ -133,9 +145,10 @@ def zillow_keys(name, abbr):
 
 
 # ---------- Census ACS (bulk summary files; the ACS API now needs a key) ----------
-def sf(year, table):
-    url = f"https://www2.census.gov/programs-surveys/acs/summary_file/{year}/table-based-SF/data/5YRData/acsdt5y{year}-{table}.dat"
-    txt = get(url, f"sf{year}-{table}.dat")
+def sf(year, table, one_year=False):
+    kind, pre = ("1YRData", "acsdt1y") if one_year else ("5YRData", "acsdt5y")
+    url = f"https://www2.census.gov/programs-surveys/acs/summary_file/{year}/table-based-SF/data/{kind}/{pre}{year}-{table}.dat"
+    txt = get(url, f"sf{'1y' if one_year else ''}{year}-{table}.dat")
     rd = csv.reader(io.StringIO(txt), delimiter="|")
     hdr = next(rd)
     out = {}
@@ -171,6 +184,26 @@ def acs_year(year, keys):
             out.setdefault(geo, {})[k] = num(row.get(col))
     return out
 
+
+# The 1-year survey covers places with 65,000+ people and is a few years fresher than the 5-year average.
+Y1, acs1_rent = None, {}
+for y in (Y + 2, Y + 1, Y):
+    try:
+        acs1_rent = {g: num(row.get("B25031_E005")) for g, row in sf(y, "b25031", one_year=True).items()}
+        Y1 = y
+        break
+    except Exception:  # noqa: BLE001
+        continue
+if Y1 is None:
+    gaps.append("ACS 1-year rents unavailable; used the 5-year survey for every city.")
+
+# Older 5-year surveys, for towns whose 3-bedroom rent the latest survey withheld (too few homes sampled).
+OLDER_RENT = {}
+for y in (Y - 1, Y - 2, Y - 3):
+    try:
+        OLDER_RENT[y] = {g: num(row.get("B25031_E005")) for g, row in sf(y, "b25031").items()}
+    except Exception:  # noqa: BLE001
+        pass
 
 cur = acs_year(Y, ["pop", "inc", "rent3", "renter", "forrent", "rentednocc", "lf", "emp", "unemp"])
 prev = acs_year(Y - 1, ["pop", "inc", "emp"])
@@ -218,6 +251,9 @@ for gy in (2025, 2024, 2023):
     break
 
 # ---------- Zillow ----------
+METRO_OF = {}  # Zillow city key or ZIP -> metro name
+
+
 def zillow(fname, kind="zhvi", by_zip=False):
     txt = get(f"https://files.zillowstatic.com/research/public_csvs/{kind}/{fname}", fname)
     rd = csv.reader(io.StringIO(txt))
@@ -227,7 +263,10 @@ def zillow(fname, kind="zhvi", by_zip=False):
     for r in rd:
         d = dict(zip(hdr, r))
         vals = [num(r[i]) if r[i] else None for i in dates]
-        out[d["RegionName"].zfill(5) if by_zip else (norm(d["RegionName"]), d["State"])] = vals
+        key = d["RegionName"].zfill(5) if by_zip else (norm(d["RegionName"]), d["State"])
+        out[key] = vals
+        if d.get("Metro"):
+            METRO_OF.setdefault(key, d["Metro"])
     return out, [hdr[i] for i in dates]
 
 
@@ -237,6 +276,23 @@ zip3, _ = zillow("Zip_zhvi_bdrmcnt_3_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
 zipall, _ = zillow("Zip_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv", by_zip=True)
 zori, zori_dates = zillow("City_zori_uc_sfrcondomfr_sm_month.csv", "zori")
 zipzori, _ = zillow("Zip_zori_uc_sfrcondomfr_sm_month.csv", "zori", by_zip=True)
+
+# Zillow's single-family rent index is only published by metro. Metro files name a metro by its first city
+# ("Houston, TX"); city and ZIP files use the full name ("Houston-The Woodlands-Sugar Land, TX").
+sfr_txt = get("https://files.zillowstatic.com/research/public_csvs/zori/Metro_zori_uc_sfr_sm_sa_month.csv",
+              "Metro_zori_uc_sfr_sm_sa_month.csv")
+_rd = csv.reader(io.StringIO(sfr_txt))
+_hdr = next(_rd)
+_di = [i for i, h in enumerate(_hdr) if re.match(r"\d{4}-\d{2}-\d{2}", h)]
+sfr_dates = [_hdr[i] for i in _di]
+metro_sfr = {r[_hdr.index("RegionName")]: [num(r[i]) if r[i] else None for i in _di] for r in _rd}
+
+
+def metro_short(full):
+    if not full or "," not in full:
+        return None
+    city, states = full.split(",", 1)
+    return f"{city.split('-')[0].strip()}, {states.strip().split('-')[0]}"
 
 # ZIP codes overlapping each place, weighted by shared land area (Census 2020 relationship file)
 place_zips = {}
@@ -258,16 +314,14 @@ def growth12(vals):
     return None
 
 
-# ACS 5-yr rents are an average over the survey years; scale them to today with Zillow's rent index.
-ACS_WINDOW = [i for i, d in enumerate(zori_dates) if Y - 4 <= int(d[:4]) <= Y]
-
-
-def rent_factor(vals):
+# Census rents describe the survey period (one year, or five years averaged); scale them to today with
+# Zillow's rent index: latest month / the index's average over that survey period.
+def rent_factor(vals, dates, years):
     if not vals:
         return None
-    base = [vals[i] for i in ACS_WINDOW if i < len(vals) and vals[i]]
+    base = [vals[i] for i, d in enumerate(dates) if int(d[:4]) in years and i < len(vals) and vals[i]]
     now = latest(vals)
-    if len(base) < 24 or not now:
+    if len(base) < min(6, 12 * len(years) // 2) or not now:
         return None
     return now / statistics.mean(base)
 
@@ -356,14 +410,33 @@ for geo, r in cur.items():
             src["vg"] = "zip"
     if not z3v and not zav:
         unmatched_zillow.append(f"{name}, {abbr}")
-    rent_acs = r.get("rent3")
+    # Rent base: the 1-year survey where published, otherwise the 5-year average.
+    if acs1_rent.get(geo):
+        rent_acs, years, rbase = acs1_rent[geo], {Y1}, "1y"
+    else:
+        rent_acs, years, rbase = r.get("rent3"), set(range(Y - 4, Y + 1)), "5y"
+    if rent_acs is None:
+        for y, table in OLDER_RENT.items():
+            if table.get(geo):
+                rent_acs, years, rbase = table[geo], set(range(y - 4, y + 1)), "5y"
+                src["rent"] = "older"
+                break
     if rent_acs is None:
         no_rent.append(f"{name}, {abbr}")
-    zkeys = keys
-    rf = next((rent_factor(zori[k]) for k in zkeys if k in zori and rent_factor(zori[k])), None)
-    rsrc = "city"
+    # Adjustment: the metro's single-family rent index first (closest match for 3-bedroom homes),
+    # then the city's all-rentals index, then its ZIP codes'; failing those, the state median (below).
+    metro = next((METRO_OF[k] for k in keys if k in METRO_OF), None)
+    if not metro:
+        zm = {}
+        for z, a in place_zips.get(geo, []):
+            if z in METRO_OF:
+                zm[METRO_OF[z]] = zm.get(METRO_OF[z], 0) + a
+        metro = max(zm, key=zm.get) if zm else None
+    rf, rsrc = rent_factor(metro_sfr.get(metro_short(metro)), sfr_dates, years), "metro"
     if rf is None:
-        rf, rsrc = zip_weighted(geo, rent_factor, zipzori), "zip"
+        rf, rsrc = next((f for f in (rent_factor(zori[k], zori_dates, years) for k in keys if k in zori) if f), None), "city"
+    if rf is None:
+        rf, rsrc = zip_weighted(geo, lambda v: rent_factor(v, zori_dates, years), zipzori), "zip"
     inc = r.get("inc")
     l = laus.get(LAUS_CODE.get((name, abbr), geo), {})
     emp, un = l.get("emp"), l.get("unemp")
@@ -380,7 +453,7 @@ for geo, r in cur.items():
     cities.append({
         "id": geo, "n": display_name(name, abbr), "s": abbr, "lon": round(lonlat[0], 4), "lat": round(lonlat[1], 4),
         "pop": int(pop),
-        "rentAcs": rent_acs, "rf": rf, "rs": rsrc, "price": round(price) if price else None, "hv": round(hv) if hv else None,
+        "rentAcs": rent_acs, "rb": rbase, "rf": rf, "rs": rsrc, "price": round(price) if price else None, "hv": round(hv) if hv else None,
         "pg": pct(pop, pop_prev), "vg": vg,
         "jg": jg,
         "ig": pct(inc, prev.get(geo, {}).get("inc")),
@@ -389,22 +462,38 @@ for geo, r in cur.items():
         "inc": inc, "ps": pop_src, "src": src,
     })
 
-# Cities with no Zillow rent index nearby get their state's median rent adjustment.
+# Cities with no Zillow rent index nearby get their state's median adjustment (same survey type).
 state_rf = {}
 for c in cities:
     if c["rf"]:
-        state_rf.setdefault(c["s"], []).append(c["rf"])
-all_rf = statistics.median([f for v in state_rf.values() for f in v])
+        state_rf.setdefault((c["s"], c["rb"]), []).append(c["rf"])
+all_rf = {rb: statistics.median([f for (s, b), v in state_rf.items() if b == rb for f in v]) for rb in ("1y", "5y")
+          if any(b == rb for _, b in state_rf)}
 for c in cities:
     if not c["rf"]:
-        c["rf"], c["rs"] = (statistics.median(state_rf[c["s"]]) if c["s"] in state_rf else all_rf), "state"
+        key = (c["s"], c["rb"])
+        c["rf"], c["rs"] = (statistics.median(state_rf[key]) if key in state_rf else all_rf.get(c["rb"], 1.0)), "state"
     c["rent"] = round(c["rentAcs"] * c["rf"]) if c["rentAcs"] else None
-    if c["rs"] != "city":
+    if c["rs"] in ("zip", "state") and "rent" not in c["src"]:
         c["src"]["rent"] = c["rs"]
     c["rf"] = round(c["rf"], 3)
     del c["rs"]
+
+# No rent this month: keep the city's last published rent rather than leave it blank.
+carried = 0
+for c in cities:
+    p = PREV.get(c["id"])
+    if c["rent"] is None and p and p.get("rent"):
+        c["rent"], c["rentAcs"], c["rf"], c["rb"] = p["rent"], None, None, None
+        c["rentAsOf"] = p.get("rentAsOf") or PREV_MONTH
+        c["src"]["rent"] = "prior"
+        carried += 1
+    elif c["rent"] is not None:
+        c["rentAsOf"] = zori_dates[-1]
     if not c["src"]:
         del c["src"]
+if carried:
+    gaps.append(f"{carried} cities had no new rent; kept their previous rent.")
 
 for c in cities:
     for k in ("pg", "vg", "jg", "ig", "vac", "un"):
@@ -414,7 +503,7 @@ for c in cities:
 missing = {k: sum(1 for c in cities if c[k] is None) for k in ("rent", "price", "pg", "vg", "jg", "ig", "vac", "un")}
 meta = {
     "acsYear": Y, "pepYears": pep_years, "zillowMonth": zdates[-1] if zdates else None, "zoriMonth": zori_dates[-1],
-    "rentFactorMedian": round(statistics.median(c["rf"] for c in cities), 3),
+    "rentFactorMedian": round(statistics.median(c["rf"] for c in cities if c["rf"]), 3), "acs1Year": Y1,
     "lausThrough": laus_through, "badLandlord": BAD_LANDLORD, "count": len(cities), "missing": missing,
 }
 with open(os.path.join(OUT, "cities.json"), "w") as f:

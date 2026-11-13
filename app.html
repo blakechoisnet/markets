@@ -517,7 +517,7 @@ function hideTip() { tip.hidden = true; }
 // ---------- city card ----------
 
 const FAILNAME = { bad: "anti-landlord state", pop: "population range", rtp: "minimum RTP", pg: "population growth", vg: "property value growth", jg: "job growth", ig: "income growth", vac: "vacancy rate", un: "unemployment rate" };
-const EST = { zip: "est. from ZIP data", acs: "Census survey est.", state: "state-level update" };
+const EST = { zip: "est. from ZIP data", acs: "Census survey est.", state: "state-level update", older: "from an older Census survey", prior: "kept from a previous update" };
 function row(label, val, fail, est) {
   const tag = est ? ` <abbr class="est" title="${EST[est]}">est.</abbr>` : "";
   return `<dt>${label}${tag}</dt>` + (val == null ? `<dd class="na">No data</dd>` : `<dd class="${fail ? "fail" : ""}">${val}</dd>`);
@@ -557,8 +557,10 @@ function openCity(c) {
     </dl></div>
     <div class="landlord"><span class="mark ${badState ? "no" : "ok"}" aria-hidden="true">${badState ? "✕" : "✓"}</span>
       <span>${badState ? "On the anti-landlord states list" : "Not on the anti-landlord states list"}</span></div>
-    <div class="src">Rent: Census ACS ${m.acsYear - 4}–${m.acsYear} median 3BR gross rent${c.rentAcs ? ` (${fmtMoney(c.rentAcs)})` : ""},
-      updated to ${month(m.zoriMonth)} with Zillow's rent index${c.rf ? ` (×${c.rf.toFixed(2)}${src.rent ? ", " + EST[src.rent] : ""})` : ""}.
+    <div class="src">${src.rent === "prior"
+      ? `Rent: no new figure this month; kept from ${month(c.rentAsOf)}.`
+      : `Rent: Census ${c.rb === "1y" ? m.acs1Year : src.rent === "older" ? "older 5-year survey" : `${m.acsYear - 4}–${m.acsYear}`} median 3BR gross rent${c.rentAcs ? ` (${fmtMoney(c.rentAcs)})` : ""},
+      updated to ${month(m.zoriMonth)} with Zillow's rent index${c.rf ? ` (×${c.rf.toFixed(2)}${src.rent && src.rent !== "older" ? ", " + EST[src.rent] : ""})` : ""}.`}
       Value: Zillow 3BR home value index, ${month(m.zillowMonth)}. Value growth: Zillow all homes, 12 mo.
       Pop. growth: Census estimates${m.pepYears ? " " + m.pepYears.join("–") : ""}.
       Jobs &amp; unemployment: BLS, 12-mo avg through ${month(m.lausThrough + "-01")}. Income &amp; rental vacancy: Census ACS.

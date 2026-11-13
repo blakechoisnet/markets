@@ -9,7 +9,7 @@ on:
     branches: [main] # republish when the map's code changes
 
 permissions:
-  contents: read
+  contents: write # saves each month's data so a city missing a rent next month can keep its last one
   pages: write
   id-token: write
 
@@ -37,6 +37,12 @@ jobs:
           python3 build_embed.py
           mkdir -p site
           cp embed/rtp-map.html site/index.html
+      - name: Save this month's data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/cities.json data/gaps.json
+          git diff --cached --quiet || (git commit -m "Refresh market data" && git push)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
