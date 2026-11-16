@@ -29,4 +29,6 @@ const payload = JSON.stringify({ meta, states, cities: out });
 const html = fs.readFileSync("app.html", "utf8").replace("/*__DATA__*/null", payload);
 fs.mkdirSync("dist", { recursive: true });
 fs.writeFileSync("dist/index.html", html);
+// City profiles stay in separate per-state files that the page loads on demand.
+if (fs.existsSync("data/profiles")) fs.cpSync("data/profiles", "dist/profiles", { recursive: true });
 console.log(`dist/index.html: ${states.length} states, ${out.length} cities, ${(html.length / 1024).toFixed(0)} KB`);

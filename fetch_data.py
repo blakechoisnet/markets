@@ -172,7 +172,7 @@ Y = latest_acs_year()
 print("ACS vintage", Y)
 TABLES = {"pop": ("b01003", "B01003_E001"), "inc": ("b19013", "B19013_E001"), "rent3": ("b25031", "B25031_E005"),
           "lf": ("b23025", "B23025_E003"), "emp": ("b23025", "B23025_E004"), "unemp": ("b23025", "B23025_E005"),
-          "renter": ("b25003", "B25003_E003"), "forrent": ("b25004", "B25004_E002"), "rentednocc": ("b25004", "B25004_E003")}
+          "renter": ("b25003", "B25003_E003"), "occ": ("b25003", "B25003_E001"), "forrent": ("b25004", "B25004_E002"), "rentednocc": ("b25004", "B25004_E003")}
 
 
 def acs_year(year, keys):
@@ -205,7 +205,7 @@ for y in (Y - 1, Y - 2, Y - 3):
     except Exception:  # noqa: BLE001
         pass
 
-cur = acs_year(Y, ["pop", "inc", "rent3", "renter", "forrent", "rentednocc", "lf", "emp", "unemp"])
+cur = acs_year(Y, ["pop", "inc", "rent3", "renter", "occ", "forrent", "rentednocc", "lf", "emp", "unemp"])
 prev = acs_year(Y - 1, ["pop", "inc", "emp"])
 
 
@@ -219,6 +219,7 @@ def rental_vacancy(d):
 # ---------- Census PEP city population ----------
 pep = {}
 pep_years = None
+POP_HIST = {}  # place -> {year: population}, for the city profile chart
 for v in (2025, 2024):
     try:
         txt, _ = try_get([f"https://www2.census.gov/programs-surveys/popest/datasets/2020-{v}/cities/totals/sub-est{v}.csv"],
@@ -228,10 +229,20 @@ for v in (2025, 2024):
     for r in csv.DictReader(io.StringIO(txt)):
         if r["SUMLEV"] in ("162", "170", "172"):
             pep[r["STATE"] + r["PLACE"]] = (num(r[f"POPESTIMATE{v}"]), num(r[f"POPESTIMATE{v-1}"]))
+            POP_HIST[r["STATE"] + r["PLACE"]] = {y: num(r[f"POPESTIMATE{y}"]) for y in range(2020, v + 1)}
     pep_years = (v - 1, v)
     break
 if not pep:
     gaps.append("Census PEP city population estimates unavailable; used ACS population for every city.")
+try:  # the 2010s, from the previous decade's estimates
+    txt = get("https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/cities/totals/sub-est2019_all.csv",
+              "sub-est2019_all.csv")
+    for r in csv.DictReader(io.StringIO(txt)):
+        g = r["STATE"] + r["PLACE"]
+        if r["SUMLEV"] in ("162", "170", "172") and g in POP_HIST:
+            POP_HIST[g].update({y: num(r[f"POPESTIMATE{y}"]) for y in range(2010, 2020)})
+except Exception as e:  # noqa: BLE001
+    gaps.append(f"2010s population estimates unavailable ({e}); profiles start in 2020.")
 
 # ---------- Gazetteer coordinates ----------
 coords = {}
@@ -373,6 +384,7 @@ except Exception as e:  # noqa: BLE001
     gaps.append(f"BLS LAUS city data unavailable ({e}); job growth and unemployment missing everywhere.")
 
 # ---------- Merge ----------
+HV_SERIES = {}  # place -> Zillow all-homes monthly values (or None), for the city profile chart
 cities, unmatched_zillow, no_rent = [], [], []
 for geo, r in cur.items():
     st = geo[:2]
@@ -398,6 +410,7 @@ for geo, r in cur.items():
         price = zip_weighted(geo, latest, zip3)
         if price is not None:
             src["price"] = "zip"
+    HV_SERIES[geo] = zav
     hv = latest(zav)  # median value of all homes (used by the Appreciation view)
     if hv is None:
         hv = zip_weighted(geo, latest, zipall)
@@ -499,6 +512,71 @@ for c in cities:
     for k in ("pg", "vg", "jg", "ig", "vac", "un"):
         if c[k] is not None:
             c[k] = round(c[k], 2)
+
+# ---------- City profiles: one file per state, loaded by the page when someone opens a city ----------
+def annual(vals, dates):
+    by = {}
+    for v, d in zip(vals or [], dates):
+        if v:
+            by.setdefault(int(d[:4]), []).append(v)
+    return {y: statistics.mean(v) for y, v in by.items() if len(v) >= 6}
+
+
+def series(by_year):
+    """{year: value} -> (first year, [values...]) with None for missing years."""
+    ys = [y for y, v in by_year.items() if v]
+    if not ys:
+        return None, []
+    return min(ys), [round(by_year[y]) if by_year.get(y) else None for y in range(min(ys), max(ys) + 1)]
+
+
+try:
+    IND_TAB = sf(Y, "c24050")  # employed residents by industry (13 groups, C24050 E002–E014)
+except Exception as e:  # noqa: BLE001
+    IND_TAB = {}
+    gaps.append(f"Industry data unavailable ({e}).")
+ACS_POP = {}
+for y in range(Y - 3, Y + 1):
+    try:
+        for g, row in sf(y, "b01003").items():
+            ACS_POP.setdefault(g, {})[y] = num(row.get("B01003_E001"))
+    except Exception:  # noqa: BLE001
+        pass
+zip_annual = {}
+profiles = {}
+for c in cities:
+    g = c["id"]
+    if POP_HIST.get(g):
+        py, pv, pk = *series(POP_HIST[g]), "pep"
+    else:
+        py, pv, pk = *series(ACS_POP.get(g, {})), "acs"
+    hvy = annual(HV_SERIES.get(g), zdates)
+    if not hvy:  # no city index: area-weighted average of the city's ZIP codes, year by year
+        tot, wt = {}, {}
+        for z, a in place_zips.get(g, []):
+            if z not in zipall:
+                continue
+            if z not in zip_annual:
+                zip_annual[z] = annual(zipall[z], zdates)
+            for y, v in zip_annual[z].items():
+                tot[y] = tot.get(y, 0) + v * a
+                wt[y] = wt.get(y, 0) + a
+        hvy = {y: tot[y] / wt[y] for y in tot}
+    hy, hv_ = series(hvy)
+    row = IND_TAB.get(g, {})
+    total = num(row.get("C24050_E001"))
+    ind = []
+    if total:
+        vals = [(i, num(row.get(f"C24050_E{i + 2:03d}")) or 0) for i in range(13)]
+        ind = [[i, round(v / total * 100, 1)] for i, v in sorted(vals, key=lambda t: -t[1])[:5]]
+    acs = cur.get(g, {})
+    rs = round(acs["renter"] / acs["occ"] * 100, 1) if acs.get("renter") is not None and acs.get("occ") else None
+    profiles.setdefault(c["s"], {})[g] = {"py": py, "p": pv, "pk": pk, "hy": hy, "h": hv_, "ind": ind, "rs": rs}
+pdir = os.path.join(OUT, "profiles")
+os.makedirs(pdir, exist_ok=True)
+for st, pr in profiles.items():
+    with open(os.path.join(pdir, f"{st}.json"), "w") as f:
+        json.dump(pr, f, separators=(",", ":"))
 
 missing = {k: sum(1 for c in cities if c[k] is None) for k in ("rent", "price", "pg", "vg", "jg", "ig", "vac", "un")}
 meta = {

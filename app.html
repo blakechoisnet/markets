@@ -20,6 +20,7 @@
   --stripe-a: #7d8691;
   --stripe-b: #d6dae0;
   --shadow: 0 10px 30px rgba(20, 32, 48, .14);
+  --s1: #2a78d6; --s2: #eb6834; /* chart series: population, home value */
   --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --f-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
   --f-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -29,12 +30,14 @@
     --bg: #11161c; --surface: #1a2129; --ink: #e8edf2; --muted: #9aa6b2; --line: #2c3540; --accent: #6ea8f0;
     --land: #232b35; --good: #3fae72; --mid: #e8b847; --bad: #e0635a; --out: #5a636e;
     --stripe-a: #5d6772; --stripe-b: #2e363f; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+    --s1: #3987e5; --s2: #d95926;
   }
 }
 :root[data-theme="dark"] {
   --bg: #11161c; --surface: #1a2129; --ink: #e8edf2; --muted: #9aa6b2; --line: #2c3540; --accent: #6ea8f0;
   --land: #232b35; --good: #3fae72; --mid: #e8b847; --bad: #e0635a; --out: #5a636e;
   --stripe-a: #5d6772; --stripe-b: #2e363f; --shadow: 0 10px 30px rgba(0, 0, 0, .45); color-scheme: dark;
+    --s1: #3987e5; --s2: #d95926;
 }
 html, body { height: 100%; }
 body {
@@ -141,8 +144,59 @@ main { position: relative; flex: 1; min-height: 0; }
 .mark.ok { background: var(--good); } .mark.no { background: var(--bad); }
 .src { margin-top: 12px; font-size: 11px; color: var(--muted); line-height: 1.45; }
 
+.learn { margin-top: 14px; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font: 600 14px var(--f-body); color: var(--surface); background: var(--accent); border: 0; border-radius: 8px;
+  padding: 10px 14px; cursor: pointer; text-align: left; }
+.learn:hover { filter: brightness(1.08); }
+.learn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* City profile: a full overlay above the map */
+#profile { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--ink) 45%, transparent);
+  display: flex; justify-content: center; align-items: flex-start; overflow-y: auto;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#profile[hidden] { display: none; }
+.pcard { background: var(--surface); color: var(--ink); border-radius: 14px; box-shadow: var(--shadow); width: 100%; max-width: 860px;
+  padding: 22px 26px 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; }
+.phead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.phead h2 { font-family: var(--f-display); font-size: 30px; margin: 0; line-height: 1.1; text-wrap: balance; }
+.phead .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.tile { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.tile .v { font: 500 20px var(--f-data); font-variant-numeric: tabular-nums; }
+.tile .d { font-size: 12px; color: var(--muted); }
+.psect h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.story p { margin: 0 0 10px; font-size: 15px; line-height: 1.6; max-width: 70ch; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.chart { position: relative; min-width: 0; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart .ax { font: 11px var(--f-data); fill: var(--muted); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .zero { stroke: var(--muted); stroke-width: 1; }
+.chart .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .lbl { font: 600 11px var(--f-body); fill: var(--ink); }
+.chart .cross { stroke: var(--muted); stroke-width: 1; }
+.ctip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; padding: 6px 8px;
+  border-radius: 6px; white-space: nowrap; transform: translate(-50%, calc(-100% - 8px)); line-height: 1.45; }
+.ctip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.ckey { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; flex-wrap: wrap; }
+.ckey i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.bars { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.brow { display: grid; grid-template-columns: minmax(0, 15em) minmax(0, 1fr) 4em; gap: 4px 12px; align-items: center; }
+.bars .track { height: 12px; background: var(--bg); border-radius: 0 4px 4px 0; }
+.bars .bar { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.bars .pv { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right; }
+.pnote { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.pmsg { color: var(--muted); padding: 20px 0; }
+
 @media (max-width: 700px) {
   h1 { font-size: 19px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts { grid-template-columns: minmax(0, 1fr); }
+  .pcard { padding: 18px 16px; }
+  .phead h2 { font-size: 24px; }
+  .brow { grid-template-columns: minmax(0, 1fr) 4em; }
+  .bars .track { grid-column: 1 / -1; order: 3; }
   #panel { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 62%; border-radius: 14px 14px 0 0;
     padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px));
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
@@ -215,6 +269,7 @@ main { position: relative; flex: 1; min-height: 0; }
   <div class="legend" id="legend"></div>
   <div id="tip" hidden></div>
   <aside id="panel" hidden aria-live="polite"></aside>
+  <div id="profile" hidden role="dialog" aria-modal="true" aria-labelledby="ptitle"></div>
 </main>
 <footer class="sources wrap"><span id="sources"></span><span class="copy">© <span id="year">2026</span> <a href="https://blakechoisnet.com" target="_blank" rel="noopener">blakechoisnet.com</a>. All rights reserved.</span></footer>
 
@@ -423,7 +478,10 @@ function drawCities() {
   if (!cur && !hl.size) return;
   const k = pxScale();
   let list = cur ? byState[cur] || [] : DATA.cities.filter(isHl);
-  list = [...list.filter((c) => !isHl(c)), ...list.filter(isHl)]; // highlighted dots on top
+  // Draw order, bottom to top: filtered, missing data, red, yellow, green, then highlighted cities.
+  const LAYER = { x: 0, m: 1, r: 2, y: 3, g: 4 };
+  const layer = (c) => (isHl(c) ? 5 : LAYER[status(c).s]);
+  list = list.map((c, i) => [c, i]).sort((a, b) => layer(a[0]) - layer(b[0]) || a[1] - b[1]).map((t) => t[0]);
   const radius = (c) => cur ? Math.max(3, Math.min(16, Math.sqrt(c.pop) / 45)) : Math.max(3.5, Math.min(9, Math.sqrt(c.pop) / 90));
   const pat = $("#stripes"); pat.setAttribute("width", 6 / k); pat.setAttribute("height", 6 / k);
   pat.children[0].setAttribute("width", 6 / k); pat.children[0].setAttribute("height", 6 / k);
@@ -555,6 +613,7 @@ function openCity(c) {
     <div class="sect"><h3>Economy</h3><dl class="kv">
       ${FIELDS.map(([k, label, f]) => row(label, f(c[k]), st.fails.includes(k), src[k])).join("")}
     </dl></div>
+    <button class="learn" id="learn">Learn more about ${c.n} <span aria-hidden="true">→</span></button>
     <div class="landlord"><span class="mark ${badState ? "no" : "ok"}" aria-hidden="true">${badState ? "✕" : "✓"}</span>
       <span>${badState ? "On the anti-landlord states list" : "Not on the anti-landlord states list"}</span></div>
     <div class="src">${src.rent === "prior"
@@ -567,9 +626,169 @@ function openCity(c) {
       “est.” marks a fallback source: ZIP-level Zillow data or Census survey figures.</div>`;
   $("#panel").hidden = false;
   $("#close").addEventListener("click", () => closePanel());
+  $("#learn").addEventListener("click", () => openProfile(c));
   drawCities();
 }
 function closePanel(silent) { $("#panel").hidden = true; selCity = null; if (!silent) drawCities(); }
+
+// ---------- city profile ----------
+// Profiles (population and home value history, industries, renter share) live in one file per state,
+// fetched the first time someone opens a city in that state.
+const INDUSTRY = ["Agriculture & mining", "Construction", "Manufacturing", "Wholesale trade", "Retail trade",
+  "Transportation, warehousing & utilities", "Information", "Finance, insurance & real estate",
+  "Professional & business services", "Education & health care", "Arts, entertainment, lodging & food",
+  "Other services", "Public administration"];
+const profileCache = {};
+function loadProfiles(st) {
+  if (!profileCache[st]) profileCache[st] = fetch(`profiles/${st}.json`).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .catch((e) => { delete profileCache[st]; throw e; });
+  return profileCache[st];
+}
+let profileCity = null, profileData = null, lastFocus = null;
+function openProfile(c) {
+  profileCity = c; profileData = null; lastFocus = document.activeElement;
+  const box = $("#profile");
+  box.innerHTML = `<div class="pcard"><div class="phead"><div><h2 id="ptitle">${c.n}</h2><div class="sub">${STATE[c.s].n}</div></div>
+    <button class="btn" id="pclose">← Back to map</button></div><div class="pmsg">Loading city profile…</div></div>`;
+  box.hidden = false; box.scrollTop = 0;
+  $("#pclose").addEventListener("click", closeProfile);
+  $("#pclose").focus();
+  loadProfiles(c.s).then((all) => { if (profileCity === c) { profileData = all[c.id] || {}; renderProfile(); } })
+    .catch(() => { if (profileCity === c) box.querySelector(".pmsg").textContent = "The city profile couldn't load. Check your connection and try again."; });
+}
+function closeProfile() {
+  $("#profile").hidden = true; profileCity = null;
+  if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+}
+$("#profile").addEventListener("click", (e) => { if (e.target.id === "profile") closeProfile(); });
+addEventListener("resize", () => { if (profileCity && profileData) renderProfile(); });
+
+const yearsOf = (y0, vals) => (vals || []).map((v, i) => [y0 + i, v]).filter((t) => t[1] != null);
+const pctChange = (a, b) => (a && b != null ? (b / a - 1) * 100 : null);
+const signed = (v, d = 1) => (v > 0 ? "+" : "") + v.toFixed(d) + "%";
+
+function renderProfile() {
+  const c = profileCity, d = profileData;
+  const pop = yearsOf(d.py, d.p), hv = yearsOf(d.hy, d.h);
+  const popFirst = pop[0], popLast = pop[pop.length - 1];
+  const hvBase = hv.find((t) => t[0] >= (popFirst ? popFirst[0] : 0)) || hv[0], hvLast = hv[hv.length - 1];
+  const popChg = popFirst && popLast && popFirst !== popLast ? pctChange(popFirst[1], popLast[1]) : null;
+  const hvChg = hvBase && hvLast && hvBase !== hvLast ? pctChange(hvBase[1], hvLast[1]) : null;
+  const tile = (k, v, sub) => `<div class="tile"><span class="k">${k}</span><span class="v">${v ?? "—"}</span><span class="d">${sub || "&nbsp;"}</span></div>`;
+  $("#profile").innerHTML = `<div class="pcard">
+    <div class="phead"><div><h2 id="ptitle">${c.n}</h2><div class="sub">${STATE[c.s].n} · city profile</div></div>
+      <button class="btn" id="pclose">← Back to map</button></div>
+    <div class="tiles">
+      ${tile("Population", fmtInt(c.pop), popChg != null ? `${signed(popChg)} since ${popFirst[0]}` : "")}
+      ${tile("Median home value", fmtMoney(c.hv), hvChg != null ? `${signed(hvChg)} since ${hvBase[0]}` : "")}
+      ${tile("Rent-to-price", c.rtp != null ? c.rtp.toFixed(2) + "%" : null, c.rent != null ? `${fmtMoney(c.rent)}/mo 3BR rent` : "")}
+      ${tile("Renter households", d.rs != null ? d.rs.toFixed(0) + "%" : null, c.vac != null ? `${c.vac.toFixed(1)}% rental vacancy` : "")}
+    </div>
+    <div class="psect story"><h3>For real estate investors</h3>${story(c, d, { popFirst, popChg, hvBase, hvChg }).map((t) => `<p>${t}</p>`).join("")}</div>
+    <div class="charts">
+      <div class="psect"><h3>Population${pop.length > 1 ? `, ${pop[0][0]}–${popLast[0]}` : ""}</h3><div class="chart" id="ch-pop"></div></div>
+      <div class="psect"><h3>Growth since ${growthBase(pop, hv) ?? "—"}</h3><div class="chart" id="ch-growth"></div></div>
+    </div>
+    <div class="psect"><h3>Top industries · share of employed residents</h3>
+      ${d.ind && d.ind.length ? `<div class="bars">${d.ind.map(([i, p]) => `<div class="brow"><span>${INDUSTRY[i]}</span><span class="track"><span class="bar" style="width:${Math.min(100, p / d.ind[0][1] * 100)}%; display:block"></span></span><span class="pv">${p.toFixed(1)}%</span></div>`).join("")}</div>`
+        : `<div class="pmsg">No industry data for this city.</div>`}</div>
+    <div class="pnote">Population: U.S. Census Bureau ${d.pk === "pep" ? "annual estimates" : "American Community Survey 5-year estimates"}. Home values: Zillow Home Value Index, all homes, yearly average${hvLast ? ` (${hvLast[0]} is year to date)` : ""}. Industries and renter share: Census ACS ${DATA.meta.acsYear - 4}–${DATA.meta.acsYear}.</div>
+  </div>`;
+  $("#pclose").addEventListener("click", closeProfile);
+  drawLine($("#ch-pop"), pop.length > 1 ? [{ name: "Population", color: "var(--s1)", pts: pop, fmt: fmtInt }] : [], { fmt: (v) => compact(v) });
+  const base = growthBase(pop, hv);
+  const idx = (pts) => { const b = pts.find((t) => t[0] === base); return b ? pts.filter((t) => t[0] >= base).map(([y, v]) => [y, pctChange(b[1], v)]) : []; };
+  const gp = idx(pop), gh = idx(hv);
+  drawLine($("#ch-growth"), [gp.length > 1 && { name: "Population", color: "var(--s1)", pts: gp, fmt: (v) => signed(v) },
+    gh.length > 1 && { name: "Home value", color: "var(--s2)", pts: gh, fmt: (v) => signed(v) }].filter(Boolean),
+    { fmt: (v) => signed(v, 0), zero: true, key: true });
+}
+function growthBase(pop, hv) {
+  const starts = [pop, hv].filter((s) => s.length > 1).map((s) => s[0][0]);
+  return starts.length ? Math.max(...starts) : null;
+}
+function compact(v) { return v >= 1e6 ? (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(v >= 1e5 ? 0 : 1).replace(/\.0$/, "") + "k" : String(Math.round(v)); }
+
+// One-axis line chart with a hover crosshair. series: [{ name, color, pts: [[year, value]], fmt }]
+function drawLine(el, series, opt) {
+  if (!series.length) { el.innerHTML = `<div class="pmsg">Not enough history to chart.</div>`; return; }
+  const W = Math.max(260, el.clientWidth), H = 200, m = { t: 12, r: opt.key ? 74 : 12, b: 22, l: 44 };
+  const xs = series.flatMap((s) => s.pts.map((p) => p[0])), ys = series.flatMap((s) => s.pts.map((p) => p[1]));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (opt.zero) { y0 = Math.min(0, y0); y1 = Math.max(0, y1); }
+  // Nice ticks
+  const span = y1 - y0 || Math.abs(y1) || 1, step0 = span / 4, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((k) => k >= step0);
+  y0 = Math.floor(y0 / step) * step; y1 = Math.ceil(y1 / step) * step; if (y0 === y1) y1 = y0 + step;
+  const X = (v) => m.l + (x1 === x0 ? 0 : (v - x0) / (x1 - x0)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+  const ticks = []; for (let v = y0; v <= y1 + step / 2; v += step) ticks.push(v);
+  const yearStep = Math.max(1, Math.ceil((x1 - x0) / Math.max(2, Math.floor((W - m.l - m.r) / 56))));
+  const xt = []; for (let v = x0; v <= x1; v += yearStep) xt.push(v);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${series.map((s) => s.name).join(" and ")} by year">`;
+  svg += ticks.map((v) => `<line class="${opt.zero && Math.abs(v) < 1e-9 ? "zero" : "grid"}" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${opt.fmt(v)}</text>`).join("");
+  svg += xt.map((v) => `<text class="ax" x="${X(v)}" y="${H - 4}" text-anchor="middle">${v}</text>`).join("");
+  for (const s of series) {
+    svg += `<path class="ln" style="stroke:${s.color}" d="${s.pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("")}"/>`;
+    const last = s.pts[s.pts.length - 1];
+    svg += `<circle cx="${X(last[0])}" cy="${Y(last[1])}" r="3.5" style="fill:${s.color}; stroke: var(--surface); stroke-width: 2"/>`;
+  }
+  if (opt.key) { // direct labels at line ends, nudged apart if they collide
+    const ends = series.map((s) => ({ s, y: Y(s.pts[s.pts.length - 1][1]) })).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+    svg += ends.map((e) => `<text class="lbl" x="${W - m.r + 8}" y="${e.y + 4}">${e.s.name}</text>`).join("");
+  }
+  svg += `<line class="cross" id="xh" y1="${m.t}" y2="${H - m.b}" visibility="hidden"/><g id="xdots"></g>
+    <rect x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent" id="xhit"/></svg>`;
+  el.innerHTML = (opt.key ? `<div class="ckey">${series.map((s) => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("")}</div>` : "") + svg + `<div class="ctip" hidden></div>`;
+  const hit = el.querySelector("#xhit"), xh = el.querySelector("#xh"), dots = el.querySelector("#xdots"), tip = el.querySelector(".ctip"), sv = el.querySelector("svg");
+  const show = (clientX) => {
+    const r = sv.getBoundingClientRect(), px = (clientX - r.left) * (W / r.width);
+    const yr = Math.round(x0 + (px - m.l) / (W - m.l - m.r) * (x1 - x0));
+    const rows = series.map((s) => [s, s.pts.find((p) => p[0] === yr)]).filter((t) => t[1]);
+    if (!rows.length) return hide();
+    xh.setAttribute("x1", X(yr)); xh.setAttribute("x2", X(yr)); xh.setAttribute("visibility", "visible");
+    dots.innerHTML = rows.map(([s, p]) => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" style="fill:${s.color}; stroke: var(--surface); stroke-width: 2"/>`).join("");
+    tip.innerHTML = `<b>${yr}</b>` + rows.map(([s, p]) => `<br><i style="background:${s.color}"></i>${s.name}: ${s.fmt(p[1])}`).join("");
+    tip.hidden = false;
+    const top = Math.min(...rows.map(([, p]) => Y(p[1])));
+    tip.style.left = Math.min(Math.max(X(yr) * r.width / W, 60), r.width - 60) + "px";
+    tip.style.top = (top * r.height / H + (opt.key ? 20 : 0)) + "px";
+  };
+  const hide = () => { xh.setAttribute("visibility", "hidden"); dots.innerHTML = ""; tip.hidden = true; };
+  hit.addEventListener("pointermove", (e) => show(e.clientX));
+  hit.addEventListener("pointerdown", (e) => show(e.clientX));
+  hit.addEventListener("pointerleave", hide);
+}
+
+// Plain-language summary built only from this city's numbers.
+function story(c, d, g) {
+  const out = [], st = STATE[c.s].n, place = c.pop >= 100000 ? "city" : c.pop >= 30000 ? "mid-sized city" : "small city";
+  let p1 = `${c.n} is a ${place} of about ${fmtInt(c.pop)} people in ${st}.`;
+  if (g.popChg != null) p1 += ` Its population has ${g.popChg >= 0 ? "grown" : "fallen"} ${Math.abs(g.popChg).toFixed(1)}% since ${g.popFirst[0]}`
+    + (c.pg != null ? `, ${c.pg >= 0 ? "adding" : "losing"} ${Math.abs(c.pg).toFixed(1)}% in the latest year.` : ".");
+  if (g.popChg != null) p1 += g.popChg > 10 ? " Steady population growth tends to support rental demand and home prices."
+    : g.popChg < -3 ? " A shrinking population can mean softer rental demand, so vacancy and tenant quality deserve a close look." : "";
+  out.push(p1);
+  let p2 = "";
+  if (c.hv != null) p2 += `The median home value is ${fmtMoney(c.hv)}` + (c.vg != null ? `, ${c.vg >= 0 ? "up" : "down"} ${Math.abs(c.vg).toFixed(1)}% over the past year` : "")
+    + (g.hvChg != null ? ` and ${g.hvChg >= 0 ? "up" : "down"} ${Math.abs(g.hvChg).toFixed(0)}% since ${g.hvBase[0]}.` : ".");
+  if (c.rtp != null) p2 += ` A typical 3-bedroom rents for about ${fmtMoney(c.rent)} a month against a median 3-bedroom value of ${fmtMoney(c.price)}, a rent-to-price ratio of ${c.rtp.toFixed(2)}%. `
+    + (c.rtp >= 1 ? "That clears the 1% mark often used to screen for positive cash flow."
+      : c.rtp >= 0.8 ? "That is in the 0.8–1% range, where cash flow is possible with a well-priced purchase and financing."
+      : "That is below 0.8%, so monthly cash flow is harder to reach; returns here depend more on appreciation.");
+  if (d.rs != null) p2 += ` About ${d.rs.toFixed(0)}% of households rent`
+    + (c.vac != null ? `, and the rental vacancy rate is ${c.vac.toFixed(1)}% (${c.vac < 5 ? "a tight market" : c.vac <= 8 ? "a moderate market" : "on the high side"}).` : ".");
+  if (p2) out.push(p2.trim());
+  let p3 = "";
+  if (d.ind && d.ind.length >= 3) p3 += `The largest industries for residents are ${INDUSTRY[d.ind[0][0]].toLowerCase()} (${d.ind[0][1].toFixed(0)}%), ${INDUSTRY[d.ind[1][0]].toLowerCase()} (${d.ind[1][1].toFixed(0)}%) and ${INDUSTRY[d.ind[2][0]].toLowerCase()} (${d.ind[2][1].toFixed(0)}%).`;
+  if (c.un != null) p3 += ` Unemployment averages ${c.un.toFixed(1)}%` + (c.jg != null ? ` and resident employment ${c.jg >= 0 ? "grew" : "shrank"} ${Math.abs(c.jg).toFixed(1)}% over the past year.` : ".");
+  if (c.inc != null) p3 += ` Median household income is ${fmtMoney(c.inc)}` + (c.ig != null ? `, ${c.ig >= 0 ? "up" : "down"} ${Math.abs(c.ig).toFixed(1)}% from the prior survey.` : ".");
+  if (BAD.has(c.s)) p3 += ` ${st} is on this map's anti-landlord states list, so review local tenant protections before buying.`;
+  if (p3) out.push(p3.trim());
+  return out;
+}
 
 // ---------- legend ----------
 function legend() {
@@ -616,7 +835,12 @@ $("#fform").addEventListener("submit", (e) => e.preventDefault());
 $("#reset").addEventListener("click", () => setTimeout(render, 0));
 $("#back").addEventListener("click", zoomOut);
 $("#jump").addEventListener("change", (e) => e.target.value ? zoomTo(e.target.value) : zoomOut());
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (!$("#panel").hidden) closePanel(); else if (cur) zoomOut(); } });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!$("#profile").hidden) closeProfile();
+  else if (!$("#panel").hidden) closePanel();
+  else if (cur) zoomOut();
+});
 addEventListener("resize", () => { if (cur) { setVB(stateBox(cur)); drawCities(); } });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); render(); });
 new MutationObserver(() => { readColors(); render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
